@@ -1,0 +1,24 @@
+#!/bin/bash
+# MatGPT.app launcher
+# Resolves the repo root relative to this .app bundle,
+# then opens a Terminal window running start.sh.
+
+# The .app lives at: <repo>/MatGPT.app
+# This script is at: <repo>/MatGPT.app/Contents/MacOS/matgpt
+SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)"
+REPO="$(dirname "$(dirname "$(dirname "$SCRIPT_PATH")")")"
+START="$REPO/start.sh"
+
+if [ ! -f "$START" ]; then
+  osascript -e "display alert \"MatGPT\" message \"start.sh not found at:\\n$START\\n\\nMake sure MatGPT.app is inside the matgpt repo folder.\""
+  exit 1
+fi
+
+# Open a new Terminal window and run start.sh inside it
+osascript <<EOF
+tell application "Terminal"
+  activate
+  set w to do script "cd '$REPO' && bash start.sh"
+  set custom title of w to "MatGPT"
+end tell
+EOF
