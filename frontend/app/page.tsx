@@ -266,10 +266,20 @@ export default function Page() {
     setConvId(null)
     setConvName('New conversation')
     setMessages([])
+    setStreamingText(null)
     setTokens(0)
     setError(null)
     inputRef.current?.focus()
   }
+
+  // If the active conversation gets deleted (by any means), clear the chat area
+  useEffect(() => {
+    if (convId === null) return
+    if (history.length === 0 || !history.some(c => c.id === convId)) {
+      startNewChat()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history])
 
   // ── Render ────────────────────────────────────────────────────────────────
 
