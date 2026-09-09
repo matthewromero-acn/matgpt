@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Generator
 
@@ -43,7 +43,7 @@ class Storage:
         return conn
 
     def save_conversation(self, conv_id: str, name: str, messages: list[Message]) -> None:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO conversations (id, name, updated_at) VALUES (?, ?, ?)",

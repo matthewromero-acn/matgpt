@@ -36,11 +36,7 @@ def test_stream_yields_chunks(config):
     mock_chunk1.choices[0].delta.content = "Hello"
     mock_chunk2 = MagicMock()
     mock_chunk2.choices[0].delta.content = " world"
-
-    mock_stream_ctx = MagicMock()
-    mock_stream_ctx.__enter__ = MagicMock(return_value=iter([mock_chunk1, mock_chunk2]))
-    mock_stream_ctx.__exit__ = MagicMock(return_value=False)
-    mock_openai.chat.completions.stream.return_value = mock_stream_ctx
+    mock_openai.chat.completions.create.return_value = iter([mock_chunk1, mock_chunk2])
 
     with patch("matgpt.client.OpenAI", return_value=mock_openai):
         client = MatGPTClient(config)
@@ -48,3 +44,6 @@ def test_stream_yields_chunks(config):
         chunks = list(client.stream(messages, model="test-model"))
 
     assert chunks == ["Hello", " world"]
+    # Verify stream=True was passed
+    call_kwargs = mock_openai.chat.completions.create.call_args[1]
+    assert call_kwargs.get("stream") is True

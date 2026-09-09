@@ -62,3 +62,16 @@ def test_delete_conversation(tmp_path):
     session.save_conversation(conv)
     session.delete_conversation(conv.id)
     assert session.load_conversation(conv.id) is None
+
+
+def test_export_conversation(tmp_path):
+    session, client, _ = make_session(tmp_path)
+    conv = session.new_conversation("Export Test")
+    conv.chat("Hello")
+    session.save_conversation(conv)
+    json_str = session.export_conversation(conv.id)
+    import json
+    data = json.loads(json_str)
+    assert data["id"] == conv.id
+    assert data["name"] == "Export Test"
+    assert len(data["messages"]) >= 1

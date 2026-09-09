@@ -58,3 +58,7 @@ class SessionManager:
 
     def delete_conversation(self, conv_id: str) -> None:
         self._storage.delete_conversation(conv_id)
+
+    def export_conversation(self, conv_id: str) -> str:
+        """Export a conversation as a JSON string. Raises ValueError if not found."""
+        return self._storage.export_json(conv_id)

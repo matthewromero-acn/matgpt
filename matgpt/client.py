@@ -27,12 +27,12 @@ class MatGPTClient:
 
     def stream(self, messages: list[Message], model: str, **kwargs) -> Iterator[str]:
         payload = [m.to_dict() for m in messages]
-        with self._openai.chat.completions.stream(
+        response = self._openai.chat.completions.create(
             model=model,
             messages=payload,
+            stream=True,
             **kwargs,
-        ) as s:
-            for chunk in s:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    yield delta
+        )
+        for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
