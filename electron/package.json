@@ -1,0 +1,39 @@
+{
+  "name": "matgpt",
+  "version": "1.0.0",
+  "description": "MatGPT — local AI chat powered by LM Studio",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.matgpt.app",
+    "productName": "MatGPT",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "../MatGPT.app/Contents/Resources/AppIcon.icns",
+      "target": [
+        "dmg",
+        "dir"
+      ]
+    },
+    "directories": {
+      "output": "../dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js"
+    ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron"
+    ]
+  }
+}

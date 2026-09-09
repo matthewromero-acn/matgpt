@@ -20,6 +20,9 @@ build/
 # Node
 frontend/node_modules/
 frontend/.next/
+electron/node_modules/
+electron/dist/
+dist/
 
 # Scratch / uploads
 *.zip
