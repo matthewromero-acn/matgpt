@@ -11,11 +11,17 @@
  *  7. On quit, kills both child processes cleanly
  */
 
-const { app, BrowserWindow, dialog, shell } = require('electron')
-const { spawn, execSync }                    = require('child_process')
-const http                                   = require('http')
-const path                                   = require('path')
-const fs                                     = require('fs')
+const { app, BrowserWindow, dialog, shell, nativeImage } = require('electron')
+const { spawn, execSync }                                 = require('child_process')
+const http                                                = require('http')
+const path                                                = require('path')
+const fs                                                  = require('fs')
+
+// Set dock icon immediately — before any window is created
+if (process.platform === 'darwin') {
+  const icon = nativeImage.createFromPath(path.join(__dirname, 'AppIcon.icns'))
+  if (!icon.isEmpty()) app.dock.setIcon(icon)
+}
 
 const REPO     = path.resolve(__dirname, '..')
 const FRONTEND = path.join(REPO, 'frontend')
