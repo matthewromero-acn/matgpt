@@ -1,6 +1,7 @@
 'use client'
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { marked } from 'marked'
 import { ArrowUp, ChevronDown, Moon, Paperclip, Plus, Search, Sparkles, Sun, Trash2, Volume2 } from 'lucide-react'
 import { api, ConversationMeta, Message } from '../lib/api'
 import { fetchWeather, Weather } from '../lib/weather'
@@ -350,7 +351,14 @@ export default function Page() {
                       <strong>{message.role === 'assistant' ? 'matgpt' : 'you'}</strong>
                       {message.time && <time>{message.time}</time>}
                     </div>
-                    <p style={{ whiteSpace: 'pre-wrap' }}>{message.text}</p>
+                    {message.role === 'assistant' ? (
+                      <div
+                        className="message-markdown"
+                        dangerouslySetInnerHTML={{ __html: marked.parse(message.text) as string }}
+                      />
+                    ) : (
+                      <p style={{ whiteSpace: 'pre-wrap' }}>{message.text}</p>
+                    )}
                     {message.role === 'assistant' && (
                       <button className="listen"><Volume2 size={13} /> Listen</button>
                     )}

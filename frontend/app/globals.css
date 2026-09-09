@@ -60,3 +60,25 @@ button { cursor: pointer; }
 /* Disabled send button */
 .send-button:disabled { opacity: .45; cursor: not-allowed; }
 .composer input:disabled { opacity: .6; }
+
+/* ── Markdown rendering in assistant messages ───────────────── */
+.message-markdown {
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 5px 0 0;
+  font-family: 'Courier New', Courier, monospace;
+}
+.message-markdown p { margin: 0 0 10px; }
+.message-markdown p:last-child { margin-bottom: 0; }
+.message-markdown ul, .message-markdown ol { margin: 0 0 10px; padding-left: 18px; }
+.message-markdown li { margin-bottom: 4px; }
+.message-markdown strong, .message-markdown b { font-weight: 900; color: inherit; }
+.message-markdown em, .message-markdown i { font-style: italic; }
+.message-markdown code { font-family: 'Courier New', Courier, monospace; background: #e6ebe0; padding: 1px 5px; font-size: 11px; }
+.message-markdown pre { background: #2a3830; color: #c8e6c0; padding: 14px 16px; overflow-x: auto; margin: 8px 0; }
+.message-markdown pre code { background: transparent; padding: 0; font-size: 11px; color: inherit; }
+.message-markdown h1, .message-markdown h2, .message-markdown h3 { font-size: 13px; font-weight: 900; margin: 14px 0 6px; letter-spacing: -.3px; }
+.message-markdown blockquote { border-left: 3px solid #7f9f77; margin: 8px 0; padding-left: 12px; color: #6a8170; }
+.message-markdown a { color: #4a7a58; text-decoration: underline; }
+.is-night .message-markdown code { background: #2d4155; }
+.is-night .message-markdown pre { background: #111d2c; color: #a8d8b0; }
