@@ -36,7 +36,9 @@ def test_stream_yields_chunks(config):
     mock_chunk1.choices[0].delta.content = "Hello"
     mock_chunk2 = MagicMock()
     mock_chunk2.choices[0].delta.content = " world"
-    mock_openai.chat.completions.create.return_value = iter([mock_chunk1, mock_chunk2])
+    mock_response = MagicMock()
+    mock_response.__iter__ = MagicMock(return_value=iter([mock_chunk1, mock_chunk2]))
+    mock_openai.chat.completions.create.return_value = mock_response
 
     with patch("matgpt.client.OpenAI", return_value=mock_openai):
         client = MatGPTClient(config)
