@@ -88,11 +88,12 @@ export default function Page() {
   const [convName, setConvName]       = useState('New conversation')
 
   // Chat state
-  const [messages, setMessages] = useState<UiMessage[]>([])
-  const [draft, setDraft]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [error, setError]       = useState<string | null>(null)
-  const [tokens, setTokens]     = useState(0)
+  const [messages, setMessages]         = useState<UiMessage[]>([])
+  const [draft, setDraft]               = useState('')
+  const [loading, setLoading]           = useState(false)
+  const [streamingText, setStreamingText] = useState<string | null>(null)
+  const [error, setError]               = useState<string | null>(null)
+  const [tokens, setTokens]             = useState(0)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef       = useRef<HTMLInputElement>(null)
@@ -160,16 +161,24 @@ export default function Page() {
         setConvName(conv.name)
       }
 
-      const data = await api.chat(id, text)
+      // Stream the response — build it up chunk by chunk
+      let fullText = ''
+      const data = await api.chatStream(id, text, (chunk) => {
+        fullText += chunk
+        setStreamingText(fullText)
+      })
 
+      // Move completed response into messages list
+      setStreamingText(null)
       setMessages((prev) => [
         ...prev,
-        { role: 'assistant', text: data.response, time: now() },
+        { role: 'assistant', text: fullText, time: now() },
       ])
       setTokens(data.tokens.total)
       refreshHistory()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Something went wrong.'
+      setStreamingText(null)
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', text: `Error: ${msg}`, time: now() },
@@ -366,7 +375,20 @@ export default function Page() {
                 </div>
               ))}
 
-              {loading && <TypingIndicator />}
+              {loading && streamingText === null && <TypingIndicator />}
+
+              {streamingText !== null && (
+                <div className="message-row assistant">
+                  <div className="message-avatar">m</div>
+                  <div className="message-copy">
+                    <div className="message-meta"><strong>matgpt</strong></div>
+                    <div
+                      className="message-markdown"
+                      dangerouslySetInnerHTML={{ __html: marked.parse(streamingText) as string }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {error && (
                 <div className="message-row assistant">

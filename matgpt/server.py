@@ -8,8 +8,11 @@ Run:
 
 from __future__ import annotations
 
+import json
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from matgpt.config import get_config
@@ -106,6 +109,28 @@ def chat(conv_id: str, req: ChatRequest) -> dict:
         "response": response,
         "tokens": conv.token_usage(),
     }
+
+@app.post("/conversations/{conv_id}/chat/stream")
+def chat_stream(conv_id: str, req: ChatRequest):
+    conv = session.load_conversation(conv_id)
+    if conv is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    def generate():
+        try:
+            for chunk in conv.chat(req.message, stream=True):
+                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            # Stream exhausted — assistant message has been appended to conv
+            session.save_conversation(conv)
+            yield f"data: {json.dumps({'done': True, 'tokens': conv.token_usage()})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 

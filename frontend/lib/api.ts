@@ -81,4 +81,43 @@ export const api = {
   /** Delete a conversation */
   deleteConversation: (id: string) =>
     request<{ deleted: string }>(`/conversations/${id}`, { method: 'DELETE' }),
+
+  /** Stream a chat response, calling onChunk for each text piece. */
+  chatStream: async (
+    conv_id: string,
+    message: string,
+    onChunk: (chunk: string) => void,
+  ): Promise<ChatResponse> => {
+    const res = await fetch(`${BASE}/conversations/${conv_id}/chat/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    })
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({}))
+      throw new Error(detail?.detail ?? `HTTP ${res.status}`)
+    }
+
+    const reader = res.body!.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let finalTokens: ChatResponse['tokens'] = { system: 0, messages: 0, total: 0 }
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const data = JSON.parse(line.slice(6))
+        if (data.chunk) onChunk(data.chunk)
+        if (data.done) finalTokens = data.tokens
+        if (data.error) throw new Error(data.error)
+      }
+    }
+
+    return { response: '', tokens: finalTokens }
+  },
 }
