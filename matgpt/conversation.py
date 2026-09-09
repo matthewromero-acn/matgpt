@@ -29,7 +29,13 @@ class Conversation:
             self.set_system_prompt(system_prompt)
 
     def set_system_prompt(self, prompt: str) -> None:
-        """Create or replace the system message with token annotation."""
+        """Create or replace the system message with token annotation.
+
+        Passing an empty string clears the system message.
+        """
+        if not prompt:
+            self._system_msg = None
+            return
         msg = Message(role=Role.SYSTEM, content=prompt)
         annotated = annotate_tokens([msg])
         self._system_msg = annotated[0]
@@ -84,7 +90,7 @@ class Conversation:
 
     def token_usage(self) -> dict[str, int]:
         """Return token counts for system, messages, and total."""
-        sys_tokens = self._system_msg.token_count or 0 if self._system_msg else 0
+        sys_tokens = (self._system_msg.token_count or 0) if self._system_msg else 0
         msg_tokens = sum(m.token_count or 0 for m in self._messages)
         return {
             "total": sys_tokens + msg_tokens,

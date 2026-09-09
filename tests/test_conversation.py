@@ -68,3 +68,10 @@ def test_no_system_prompt_works():
     assert result == "I am the assistant."
     history = conv.history()
     assert all(m.role != Role.SYSTEM for m in history)
+
+
+def test_set_system_prompt_empty_clears_system():
+    conv, _, _ = make_conversation(system_prompt="I had a prompt.")
+    conv.set_system_prompt("")
+    history = conv.history()
+    assert all(m.role != Role.SYSTEM for m in history)
