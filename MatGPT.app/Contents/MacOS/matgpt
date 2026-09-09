@@ -1,13 +1,14 @@
 #!/bin/bash
-# MatGPT.app launcher — runs the Electron app
+# MatGPT.app launcher
+# Uses the Electron binary directly so it works from the Dock (no PATH dependency).
+
 SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(dirname "$(dirname "$(dirname "$SCRIPT_PATH")")")"
-ELECTRON="$REPO/electron/node_modules/.bin/electron"
+ELECTRON_APP="$REPO/electron/node_modules/.pnpm/electron@33.4.11_supports-color@7.2.0/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron"
 
-if [ ! -f "$ELECTRON" ]; then
-  osascript -e "display alert \"MatGPT\" message \"Electron not installed yet.\n\nRun this in Terminal:\n\ncd '$REPO/electron' && npm install\""
+if [ ! -f "$ELECTRON_APP" ]; then
+  osascript -e "display alert \"MatGPT\" message \"Electron not found.\n\nRun setup first:\n\ncd '$REPO' && bash install.sh\""
   exit 1
 fi
 
-cd "$REPO/electron"
-exec "$ELECTRON" .
+exec "$ELECTRON_APP" "$REPO/electron"
