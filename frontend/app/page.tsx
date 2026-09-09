@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
-import { ArrowUp, ChevronDown, Moon, Paperclip, Plus, Search, Sparkles, Sun, Trash2, Volume2 } from 'lucide-react'
+import { ArrowUp, Brain, ChevronDown, ChevronRight, Moon, Paperclip, Plus, Search, Sparkles, Sun, Trash2, Volume2 } from 'lucide-react'
 import { api, ConversationMeta, Message } from '../lib/api'
 import { fetchWeather, Weather } from '../lib/weather'
 
@@ -12,6 +12,19 @@ interface UiMessage {
   role: 'user' | 'assistant'
   text: string
   time: string
+}
+
+// ── Thinking parser ───────────────────────────────────────────────────────────
+
+function parseThinking(raw: string): { thinking: string | null; answer: string; done: boolean } {
+  // Complete: <think>...</think>answer
+  const complete = raw.match(/^<think>([\s\S]*?)<\/think>([\s\S]*)$/)
+  if (complete) return { thinking: complete[1].trim(), answer: complete[2].trimStart(), done: true }
+  // Still inside think block
+  const open = raw.match(/^<think>([\s\S]*)$/)
+  if (open) return { thinking: open[1], answer: '', done: false }
+  // No thinking
+  return { thinking: null, answer: raw, done: true }
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -58,6 +71,24 @@ function PixelScene({ night, weather }: { night: boolean; weather: Weather }) {
   )
 }
 
+function ThinkingBlock({ text, done }: { text: string; done: boolean }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="thinking-block">
+      <button className="thinking-toggle" onClick={() => setOpen(o => !o)}>
+        <Brain size={11} />
+        {done ? 'Thought' : 'Thinking…'}
+        {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+      </button>
+      {open && (
+        <div className="thinking-body">
+          {text || <span style={{ opacity: 0.4 }}>…</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TypingIndicator() {
   return (
     <div className="message-row assistant">
@@ -88,15 +119,17 @@ export default function Page() {
   const [convName, setConvName]       = useState('New conversation')
 
   // Chat state
-  const [messages, setMessages]         = useState<UiMessage[]>([])
-  const [draft, setDraft]               = useState('')
-  const [loading, setLoading]           = useState(false)
+  const [messages, setMessages]           = useState<UiMessage[]>([])
+  const [draft, setDraft]                 = useState('')
+  const [loading, setLoading]             = useState(false)
   const [streamingText, setStreamingText] = useState<string | null>(null)
-  const [error, setError]               = useState<string | null>(null)
-  const [tokens, setTokens]             = useState(0)
+  const [thinking, setThinking]           = useState(false)
+  const [error, setError]                 = useState<string | null>(null)
+  const [tokens, setTokens]               = useState(0)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef       = useRef<HTMLInputElement>(null)
+  const abortRef       = useRef<AbortController | null>(null)
 
   // ── Boot ─────────────────────────────────────────────────────────────────
 
@@ -124,10 +157,10 @@ export default function Page() {
     boot()
   }, [])
 
-  // Scroll to bottom on new messages
+  // Auto-scroll on new messages and every streaming chunk
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, loading])
+  }, [messages, loading, streamingText])
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -162,11 +195,14 @@ export default function Page() {
       }
 
       // Stream the response — build it up chunk by chunk
+      const abort = new AbortController()
+      abortRef.current = abort
+
       let fullText = ''
       const data = await api.chatStream(id, text, (chunk) => {
         fullText += chunk
         setStreamingText(fullText)
-      })
+      }, thinking, abort.signal)
 
       // Move completed response into messages list
       setStreamingText(null)
@@ -177,13 +213,18 @@ export default function Page() {
       setTokens(data.tokens.total)
       refreshHistory()
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'Something went wrong.'
-      setStreamingText(null)
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', text: `Error: ${msg}`, time: now() },
-      ])
+      if (e instanceof Error && e.name === 'AbortError') {
+        // User stopped generation — keep whatever was streamed so far
+      } else {
+        const msg = e instanceof Error ? e.message : 'Something went wrong.'
+        setStreamingText(null)
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', text: `Error: ${msg}`, time: now() },
+        ])
+      }
     } finally {
+      abortRef.current = null
       setLoading(false)
       inputRef.current?.focus()
     }
@@ -360,12 +401,18 @@ export default function Page() {
                       <strong>{message.role === 'assistant' ? 'matgpt' : 'you'}</strong>
                       {message.time && <time>{message.time}</time>}
                     </div>
-                    {message.role === 'assistant' ? (
-                      <div
-                        className="message-markdown"
-                        dangerouslySetInnerHTML={{ __html: marked.parse(message.text) as string }}
-                      />
-                    ) : (
+                    {message.role === 'assistant' ? (() => {
+                      const { thinking: thinkText, answer, done } = parseThinking(message.text)
+                      return (
+                        <>
+                          {thinkText !== null && <ThinkingBlock text={thinkText} done={done} />}
+                          <div
+                            className="message-markdown"
+                            dangerouslySetInnerHTML={{ __html: marked.parse(answer || message.text) as string }}
+                          />
+                        </>
+                      )
+                    })() : (
                       <p style={{ whiteSpace: 'pre-wrap' }}>{message.text}</p>
                     )}
                     {message.role === 'assistant' && (
@@ -377,18 +424,24 @@ export default function Page() {
 
               {loading && streamingText === null && <TypingIndicator />}
 
-              {streamingText !== null && (
-                <div className="message-row assistant">
-                  <div className="message-avatar">m</div>
-                  <div className="message-copy">
-                    <div className="message-meta"><strong>matgpt</strong></div>
-                    <div
-                      className="message-markdown"
-                      dangerouslySetInnerHTML={{ __html: marked.parse(streamingText) as string }}
-                    />
+              {streamingText !== null && (() => {
+                const { thinking: thinkText, answer, done } = parseThinking(streamingText)
+                return (
+                  <div className="message-row assistant">
+                    <div className="message-avatar">m</div>
+                    <div className="message-copy">
+                      <div className="message-meta"><strong>matgpt</strong></div>
+                      {thinkText !== null && <ThinkingBlock text={thinkText} done={done} />}
+                      {answer && (
+                        <div
+                          className="message-markdown"
+                          dangerouslySetInnerHTML={{ __html: marked.parse(answer) as string }}
+                        />
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
+                )
+              })()}
 
               {error && (
                 <div className="message-row assistant">
@@ -416,10 +469,33 @@ export default function Page() {
               disabled={loading}
               autoFocus
             />
-            <span className="enter-hint">↵ send</span>
-            <button type="submit" className="send-button" aria-label="Send" disabled={loading || !draft.trim()}>
-              <ArrowUp size={17} />
+            <button
+              type="button"
+              className={`think-toggle ${thinking ? 'active' : ''}`}
+              onClick={() => setThinking(t => !t)}
+              title={thinking ? 'Thinking on — click to disable' : 'Enable thinking mode'}
+              aria-pressed={thinking}
+            >
+              <Brain size={14} />
+              <span>Think</span>
             </button>
+            {!loading && <span className="enter-hint">↵ send</span>}
+            {loading ? (
+              <button
+                type="button"
+                className="stop-button"
+                aria-label="Stop generation"
+                onClick={() => abortRef.current?.abort()}
+              >
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="currentColor">
+                  <rect x="2" y="2" width="9" height="9" />
+                </svg>
+              </button>
+            ) : (
+              <button type="submit" className="send-button" aria-label="Send" disabled={!draft.trim()}>
+                <ArrowUp size={17} />
+              </button>
+            )}
           </form>
 
           <footer className="chat-footer">

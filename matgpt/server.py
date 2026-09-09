@@ -95,6 +95,7 @@ def delete_conversation(conv_id: str) -> dict:
 
 class ChatRequest(BaseModel):
     message: str
+    thinking: bool = False
 
 @app.post("/conversations/{conv_id}/chat")
 def chat(conv_id: str, req: ChatRequest) -> dict:
@@ -102,7 +103,7 @@ def chat(conv_id: str, req: ChatRequest) -> dict:
     if conv is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    response = conv.chat(req.message, stream=False)
+    response = conv.chat(req.message, stream=False, thinking=req.thinking)
     session.save_conversation(conv)
 
     return {
@@ -118,7 +119,7 @@ def chat_stream(conv_id: str, req: ChatRequest):
 
     def generate():
         try:
-            for chunk in conv.chat(req.message, stream=True):
+            for chunk in conv.chat(req.message, stream=True, thinking=req.thinking):
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
             # Stream exhausted — assistant message has been appended to conv
             session.save_conversation(conv)

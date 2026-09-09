@@ -111,15 +111,26 @@ class Conversation:
         except Exception:
             pass  # non-fatal
 
-    def chat(self, user_input: str, stream: bool = False) -> str | Iterator[str]:
+    def chat(self, user_input: str, stream: bool = False, thinking: bool = False) -> str | Iterator[str]:
         """Send a user message and return the assistant reply.
 
         Non-stream: returns str.
         Stream: returns Iterator[str] that appends the assistant message when exhausted.
+        thinking: if True, prepends /think so Qwen3 shows its reasoning inside
+                  <think>…</think> tags. The prefix is injected into the payload
+                  only — it is NOT stored in the conversation history.
         """
         memory_block = self._retrieve_memories(user_input)
         self.add_user_message(user_input)
+
+        # Build payload then inject thinking prefix into the last user message
         payload = self._build_payload(memory_block)
+        if thinking and payload and payload[-1].role == Role.USER:
+            from dataclasses import replace as dc_replace
+            payload[-1] = dc_replace(payload[-1], content=f"/think {payload[-1].content}")
+        elif not thinking and payload and payload[-1].role == Role.USER:
+            from dataclasses import replace as dc_replace
+            payload[-1] = dc_replace(payload[-1], content=f"/no_think {payload[-1].content}")
         model = self._model_manager.current()
 
         if stream:

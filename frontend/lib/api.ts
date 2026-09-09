@@ -87,11 +87,14 @@ export const api = {
     conv_id: string,
     message: string,
     onChunk: (chunk: string) => void,
+    thinking = false,
+    signal?: AbortSignal,
   ): Promise<ChatResponse> => {
     const res = await fetch(`${BASE}/conversations/${conv_id}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, thinking }),
+      signal,
     })
     if (!res.ok) {
       const detail = await res.json().catch(() => ({}))
