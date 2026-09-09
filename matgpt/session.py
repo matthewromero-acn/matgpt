@@ -4,6 +4,7 @@ import uuid
 from matgpt.client import MatGPTClient
 from matgpt.config import Config
 from matgpt.conversation import Conversation
+from matgpt.embeddings import EmbeddingClient
 from matgpt.message import Role
 from matgpt.models import ModelManager
 from matgpt.storage import Storage
@@ -15,6 +16,7 @@ class SessionManager:
         self._client = MatGPTClient(config)
         self._model_manager = ModelManager(self._client)
         self._storage = Storage(config.db_path)
+        self._embedding_client = EmbeddingClient(config)
 
     @property
     def model_manager(self) -> ModelManager:
@@ -28,6 +30,8 @@ class SessionManager:
             client=self._client,
             system_prompt=system_prompt,
             max_tokens=self._config.default_context_window,
+            embedding_client=self._embedding_client,
+            storage=self._storage,
         )
 
     def save_conversation(self, conv: Conversation) -> None:
@@ -49,6 +53,8 @@ class SessionManager:
             client=self._client,
             system_prompt=system_msg.content if system_msg else "",
             max_tokens=self._config.default_context_window,
+            embedding_client=self._embedding_client,
+            storage=self._storage,
         )
         conv._messages = other_msgs
         return conv

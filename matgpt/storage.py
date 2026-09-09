@@ -26,6 +26,14 @@ CREATE TABLE IF NOT EXISTS messages (
     timestamp TEXT NOT NULL,
     position INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS embeddings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    embedding BLOB NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -106,6 +114,54 @@ class Storage:
     def delete_conversation(self, conv_id: str) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM conversations WHERE id = ?", (conv_id,))
+
+    # ── RAG / Embeddings ──────────────────────────────────────────────────────
+
+    def save_embedding(self, conv_id: str, content: str, embedding: bytes) -> None:
+        """Store a serialized embedding for a piece of content in a conversation."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO embeddings (conversation_id, content, embedding, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (conv_id, content, embedding, now),
+            )
+
+    def search_similar(
+        self,
+        query_embedding: list[float],
+        top_k: int = 4,
+        exclude_conv_id: str | None = None,
+    ) -> list[dict]:
+        """Return up to top_k embedding rows sorted by cosine similarity.
+
+        Excludes the current conversation so the model only sees *other*
+        sessions' memories. Returns dicts with keys: content, similarity.
+        """
+        from matgpt.embeddings import cosine_similarity, deserialize
+
+        with self._connect() as conn:
+            if exclude_conv_id:
+                rows = conn.execute(
+                    "SELECT content, embedding FROM embeddings WHERE conversation_id != ?",
+                    (exclude_conv_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT content, embedding FROM embeddings"
+                ).fetchall()
+
+        scored: list[tuple[float, str]] = []
+        for row in rows:
+            vec = deserialize(row["embedding"])
+            sim = cosine_similarity(query_embedding, vec)
+            scored.append((sim, row["content"]))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [
+            {"content": content, "similarity": sim}
+            for sim, content in scored[:top_k]
+        ]
 
     def export_json(self, conv_id: str) -> str:
         result = self.load_conversation(conv_id)

@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 from matgpt.client import MatGPTClient
 from matgpt.context import annotate_tokens, fit_to_window
 from matgpt.message import Message, Role
 from matgpt.models import ModelManager
+
+if TYPE_CHECKING:
+    from matgpt.embeddings import EmbeddingClient
+    from matgpt.storage import Storage
+
+# Minimum similarity threshold — memories below this are too unrelated to inject
+_MIN_SIMILARITY = 0.45
+# Max number of past memories to surface per turn
+_MAX_MEMORIES = 3
 
 
 class Conversation:
@@ -17,6 +27,8 @@ class Conversation:
         client: MatGPTClient,
         system_prompt: str = "",
         max_tokens: int = 4096,
+        embedding_client: EmbeddingClient | None = None,
+        storage: Storage | None = None,
     ) -> None:
         self.id = id
         self.name = name
@@ -25,6 +37,8 @@ class Conversation:
         self._max_tokens = max_tokens
         self._messages: list[Message] = []
         self._system_msg: Message | None = None
+        self._embedding_client = embedding_client
+        self._storage = storage
         if system_prompt:
             self.set_system_prompt(system_prompt)
 
@@ -46,10 +60,56 @@ class Conversation:
         self._messages.append(msg)
         return msg
 
-    def _build_payload(self) -> list[Message]:
-        """Annotate current messages and apply context-window trimming."""
+    def _build_payload(self, memory_block: str | None = None) -> list[Message]:
+        """Annotate current messages and apply context-window trimming.
+
+        If memory_block is provided it is prepended to the system prompt so the
+        model sees relevant past context without it counting against the
+        rolling message history.
+        """
         annotated = annotate_tokens(self._messages)
-        return fit_to_window(annotated, self._max_tokens, self._system_msg)
+
+        if memory_block and self._system_msg:
+            from dataclasses import replace as dc_replace
+            enhanced = dc_replace(
+                self._system_msg,
+                content=f"{self._system_msg.content}\n\n{memory_block}",
+            )
+            enhanced = annotate_tokens([enhanced])[0]
+        else:
+            enhanced = self._system_msg
+
+        return fit_to_window(annotated, self._max_tokens, enhanced)
+
+    def _retrieve_memories(self, user_input: str) -> str | None:
+        """Embed user_input, search past conversations, return a formatted block."""
+        if self._embedding_client is None or self._storage is None:
+            return None
+        try:
+            query_vec = self._embedding_client.embed(user_input)
+            hits = self._storage.search_similar(
+                query_vec, top_k=_MAX_MEMORIES, exclude_conv_id=self.id
+            )
+            relevant = [h for h in hits if h["similarity"] >= _MIN_SIMILARITY]
+            if not relevant:
+                return None
+            snippets = "\n".join(f'- {h["content"]}' for h in relevant)
+            return f"[Relevant memories from past conversations]\n{snippets}"
+        except Exception:
+            # Embedding failures are non-fatal — degrade gracefully
+            return None
+
+    def _save_exchange_embedding(self, user_input: str, assistant_reply: str) -> None:
+        """Embed the user+assistant exchange and store it for future RAG lookups."""
+        if self._embedding_client is None or self._storage is None:
+            return
+        try:
+            from matgpt.embeddings import serialize
+            text = f"User: {user_input}\nAssistant: {assistant_reply}"
+            vec = self._embedding_client.embed(text)
+            self._storage.save_embedding(self.id, text, serialize(vec))
+        except Exception:
+            pass  # non-fatal
 
     def chat(self, user_input: str, stream: bool = False) -> str | Iterator[str]:
         """Send a user message and return the assistant reply.
@@ -57,8 +117,9 @@ class Conversation:
         Non-stream: returns str.
         Stream: returns Iterator[str] that appends the assistant message when exhausted.
         """
+        memory_block = self._retrieve_memories(user_input)
         self.add_user_message(user_input)
-        payload = self._build_payload()
+        payload = self._build_payload(memory_block)
         model = self._model_manager.current()
 
         if stream:
@@ -70,12 +131,14 @@ class Conversation:
                 self._messages.append(
                     annotate_tokens([Message(role=Role.ASSISTANT, content=full)])[0]
                 )
+                self._save_exchange_embedding(user_input, full)
             return _stream()
         else:
             response = self._client.complete(payload, model=model)
             self._messages.append(
                 annotate_tokens([Message(role=Role.ASSISTANT, content=response)])[0]
             )
+            self._save_exchange_embedding(user_input, response)
             return response
 
     def history(self) -> list[Message]:
