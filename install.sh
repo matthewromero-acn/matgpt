@@ -40,6 +40,14 @@ if [ ! -f "$EPATH/path.txt" ]; then
   rm "$ZIP"
 fi
 
+# ── Replace Electron robot icon with MatGPT pixel face ───────────────────────
+echo "▸ Setting app icon..."
+ELECTRON_RESOURCES=$(find "$REPO/electron/node_modules" -name "electron.icns" -path "*/Electron.app/*" 2>/dev/null | head -1)
+if [ -n "$ELECTRON_RESOURCES" ]; then
+  cp "$REPO/electron/AppIcon.icns" "$ELECTRON_RESOURCES"
+fi
+killall Dock 2>/dev/null || true
+
 echo ""
 echo "  ✓ Setup complete!"
 echo "  Double-click MatGPT.app to launch, or run: cd electron && npx electron ."
